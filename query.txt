@@ -1,0 +1,2 @@
+localhost:4000/v1/schools?name=xyz&level=high+school&mode=online,face-to-face&page=1&page_size=5&sort=-mode
+

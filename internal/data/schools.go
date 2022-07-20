@@ -67,10 +67,6 @@ func (m SchoolModel) Insert(school *School) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, version
 	`
-	// Create a context
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	// Cleanup to prevent memory leaks
-	defer cancel()
 	// Collect the data fields into a slice
 	args := []interface{}{
 		school.Name, school.Level,
@@ -78,6 +74,10 @@ func (m SchoolModel) Insert(school *School) error {
 		school.Email, school.Website,
 		school.Address, pq.Array(school.Mode),
 	}
+	// Create a context
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// Cleanup to prevent memory leaks
+	defer cancel()
 	return m.DB.QueryRowContext(ctx, query, args...).Scan(&school.ID, &school.CreatedAt, &school.Version)
 }
 
@@ -140,11 +140,6 @@ func (m SchoolModel) Update(school *School) error {
 		AND version = $10
 		RETURNING version
 	`
-	// Create a context
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	// Cleanup to prevent memory leaks
-	defer cancel()
-
 	args := []interface{}{
 		school.Name,
 		school.Level,
@@ -157,6 +152,10 @@ func (m SchoolModel) Update(school *School) error {
 		school.ID,
 		school.Version,
 	}
+	// Create a context
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// Cleanup to prevent memory leaks
+	defer cancel()
 	// Check for edit conflicts
 	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&school.Version)
 	if err != nil {
