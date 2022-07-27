@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"appletree.dalwinlewis.net/internal/validator"
@@ -203,28 +204,31 @@ func (m SchoolModel) Delete(id int64) error {
 }
 
 // The GetAll() method retuns a list of all the schools sorted by id
-func (m SchoolModel) GetAll(name string, level string, mode []string, filters Filters) ([]*School, error) {
+func (m SchoolModel) GetAll(name string, level string, mode []string, filters Filters) ([]*School, Metadata, error) {
 	// Construct the query
-	query := `
-		SELECT id, created_at, name, level,
+	query := fmt.Sprintf(`
+		SELECT COUNT(*) OVER(), id, created_at, name, level,
 		       contact, phone, email, website,
 			   address, mode, version
 		FROM schools
 		WHERE (to_tsvector('simple', name) @@ plainto_tsquery('simple', $1) OR $1 = '')
 		AND (to_tsvector('simple', level) @@ plainto_tsquery('simple', $2) OR $2 = '')
 		AND (mode @> $3 OR $3 = '{}' )
-		ORDER BY id
-	`
+		ORDER BY %s %s, id ASC
+		LIMIT $4 OFFSET $5`, filters.sortColumn(), filters.sortOrder())
+
 	// Create a 3-second-timout context
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	// Execute the query
-	rows, err := m.DB.QueryContext(ctx, query, name, level, pq.Array(mode))
+	args := []interface{}{name, level, pq.Array(mode), filters.limit(), filters.offset()}
+	rows, err := m.DB.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, Metadata{}, err
 	}
 	// Close the resultset
 	defer rows.Close()
+	totalRecords := 0
 	// Initialize an empty slice to hold the School data
 	schools := []*School{}
 	// Iterate over the rows in the resultset
@@ -232,6 +236,7 @@ func (m SchoolModel) GetAll(name string, level string, mode []string, filters Fi
 		var school School
 		// Scan the values from the row into school
 		err := rows.Scan(
+			&totalRecords,
 			&school.ID,
 			&school.CreatedAt,
 			&school.Name,
@@ -245,15 +250,16 @@ func (m SchoolModel) GetAll(name string, level string, mode []string, filters Fi
 			&school.Version,
 		)
 		if err != nil {
-			return nil, err
+			return nil, Metadata{}, err
 		}
 		// Add the School to our slice
 		schools = append(schools, &school)
 	}
 	// Check for errors after looping through the resultset
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, Metadata{}, err
 	}
+	metadata := calculateMetadata(totalRecords, filters.Page, filters.PageSize)
 	// Return the slice of Schools
-	return schools, nil
+	return schools, metadata, nil
 }
